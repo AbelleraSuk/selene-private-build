@@ -1,13 +1,10 @@
 name: Build Selene Private
 
-
 on:
   workflow_dispatch:
 
-
 permissions:
   contents: write
-
 
 jobs:
   build-macos:
@@ -24,7 +21,6 @@ jobs:
       - run: git -C selene apply ../selene-private.patch
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.34.0'
           channel: stable
           cache: true
       - working-directory: selene
@@ -37,4 +33,9 @@ jobs:
           codesign --force --deep --sign - "$APP"
           ditto -c -k --sequesterRsrc --keepParent "$APP" ../Selene-Private-macos.zip
       - uses: softprops/action-gh-release@v2
-
+        with:
+          tag_name: private-${{ steps.upstream.outputs.sha }}
+          name: Selene Private ${{ steps.upstream.outputs.sha }}
+          body: Selene private build with LunaTV private navigation.
+          files: Selene-Private-macos.zip
+          make_latest: true
