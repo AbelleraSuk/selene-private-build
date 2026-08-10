@@ -1,10 +1,15 @@
 name: Build Selene Private
 
+
 on:
   workflow_dispatch:
+  schedule:
+    - cron: '20 3 * * *'
+
 
 permissions:
   contents: write
+
 
 jobs:
   build-macos:
@@ -34,8 +39,3 @@ jobs:
           ditto -c -k --sequesterRsrc --keepParent "$APP" ../Selene-Private-macos.zip
       - uses: softprops/action-gh-release@v2
         with:
-          tag_name: private-${{ steps.upstream.outputs.sha }}
-          name: Selene Private ${{ steps.upstream.outputs.sha }}
-          body: Selene private build with LunaTV private navigation.
-          files: Selene-Private-macos.zip
-          make_latest: true
