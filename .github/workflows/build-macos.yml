@@ -18,6 +18,10 @@ jobs:
       - name: Check out Selene source
         run: git clone --depth 1 https://github.com/MoonTechLab/Selene-Source.git selene
 
+      - name: Make pubspec compatible
+        working-directory: selene
+        run: sed -i '' '/^  config:/,/^    enable-swift-package-manager: false/d' pubspec.yaml
+
       - name: Read upstream revision
         id: upstream
         working-directory: selene
@@ -54,8 +58,7 @@ jobs:
           tag_name: private-${{ steps.upstream.outputs.sha }}
           name: Selene Private ${{ steps.upstream.outputs.sha }}
           body: |
-            Selene 私密版，基于官方源码提交 `${{ steps.upstream.outputs.sha }}` 构建。
-            
-            包含 LunaTV“私密”组的导航入口。请勿使用官方应用内更新覆盖此版本。
+            Selene private build based on upstream ${{ steps.upstream.outputs.sha }}.
+            Includes the LunaTV private navigation entry.
           files: Selene-Private-macos.zip
           make_latest: true
