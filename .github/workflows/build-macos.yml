@@ -20,7 +20,8 @@ jobs:
 
       - name: Make pubspec compatible
         working-directory: selene
-        run: sed -i '' '/^  config:/,/^    enable-swift-package-manager: false/d' pubspec.yaml
+        run: |
+          sed -i '' '/^  config:/,/^    enable-swift-package-manager: false/d' pubspec.yaml
 
       - name: Read upstream revision
         id: upstream
@@ -57,8 +58,6 @@ jobs:
         with:
           tag_name: private-${{ steps.upstream.outputs.sha }}
           name: Selene Private ${{ steps.upstream.outputs.sha }}
-          body: |
-            Selene private build based on upstream ${{ steps.upstream.outputs.sha }}.
-            Includes the LunaTV private navigation entry.
+          body: Selene private build with LunaTV private navigation.
           files: Selene-Private-macos.zip
           make_latest: true
