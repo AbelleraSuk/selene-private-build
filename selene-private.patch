@@ -1,0 +1,416 @@
+diff --git a/lib/screens/home_screen.dart b/lib/screens/home_screen.dart
+index b99dd1d..ae08207 100644
+--- a/lib/screens/home_screen.dart
++++ b/lib/screens/home_screen.dart
+@@ -25,6 +25,8 @@ import 'anime_screen.dart';
+ import 'show_screen.dart';
+ import 'player_screen.dart';
+ import 'live_screen.dart';
++import 'private_screen.dart';
++import '../services/api_service.dart';
+ 
+ class HomeScreen extends StatefulWidget {
+   const HomeScreen({super.key});
+@@ -38,6 +40,7 @@ class _HomeScreenState extends State<HomeScreen> {
+   String _selectedTopTab = '首页';
+   late PageController _pageController;
+   late PageController _bottomNavPageController;
++  bool _hasPrivateAccess = false;
+ 
+   @override
+   void initState() {
+@@ -50,6 +53,13 @@ class _HomeScreenState extends State<HomeScreen> {
+     _refreshCacheOnHomeEnter();
+     // 检查应用更新
+     _checkForUpdates();
++    _loadPrivateAccess();
++  }
++
++  Future<void> _loadPrivateAccess() async {
++    final access = await ApiService.getPrivateAccess();
++    if (!mounted || !access.allowed) return;
++    setState(() => _hasPrivateAccess = true);
+   }
+ 
+   /// 检查应用更新
+@@ -397,6 +407,7 @@ class _HomeScreenState extends State<HomeScreen> {
+       onTopTabChanged: _onTopTabChanged,
+       onHomeTap: _onHomeTap,
+       onSearchTap: _onSearchTap,
++      showPrivateNav: _hasPrivateAccess,
+     );
+   }
+ 
+@@ -419,10 +430,22 @@ class _HomeScreenState extends State<HomeScreen> {
+         const AnimeScreen(),
+         const ShowScreen(),
+         const LiveScreen(),
++        if (_hasPrivateAccess) PrivateScreen(onVideoTap: _onPrivateVideoTap),
+       ],
+     );
+   }
+ 
++  void _onPrivateVideoTap(VideoInfo videoInfo) {
++    _navigateToPlayer(
++      PlayerScreen(
++        source: videoInfo.source,
++        id: videoInfo.id,
++        title: videoInfo.title,
++        year: videoInfo.year,
++      ),
++    );
++  }
++
+   /// 处理底部导航栏切换
+   void _onBottomNavChanged(int index) {
+     if (!mounted) return;
+diff --git a/lib/screens/private_screen.dart b/lib/screens/private_screen.dart
+new file mode 100644
+index 0000000..4505ee0
+--- /dev/null
++++ b/lib/screens/private_screen.dart
+@@ -0,0 +1,151 @@
++import 'package:flutter/material.dart';
++
++import '../models/video_info.dart';
++import '../services/api_service.dart';
++import '../utils/device_utils.dart';
++import '../utils/font_utils.dart';
++import '../widgets/video_card.dart';
++
++class PrivateScreen extends StatefulWidget {
++  final ValueChanged<VideoInfo> onVideoTap;
++
++  const PrivateScreen({super.key, required this.onVideoTap});
++
++  @override
++  State<PrivateScreen> createState() => _PrivateScreenState();
++}
++
++class _PrivateScreenState extends State<PrivateScreen> {
++  bool _loading = true;
++  PrivateAccess? _access;
++  PrivateCatalog? _catalog;
++  String? _selectedSource;
++
++  @override
++  void initState() {
++    super.initState();
++    _load();
++  }
++
++  Future<void> _load({String? source, int page = 1}) async {
++    setState(() => _loading = true);
++    final access = _access ?? await ApiService.getPrivateAccess();
++    if (!access.allowed || access.sources.isEmpty) {
++      if (mounted) {
++        setState(() {
++          _access = access;
++          _catalog = null;
++          _loading = false;
++        });
++      }
++      return;
++    }
++
++    final selectedSource = source ?? _selectedSource ?? access.sources.first.key;
++    final catalog = await ApiService.getPrivateCatalog(
++      source: selectedSource,
++      page: page,
++    );
++    if (!mounted) return;
++    setState(() {
++      _access = access;
++      _selectedSource = selectedSource;
++      _catalog = catalog;
++      _loading = false;
++    });
++  }
++
++  @override
++  Widget build(BuildContext context) {
++    if (_loading) return const Center(child: CircularProgressIndicator());
++
++    final access = _access;
++    if (access == null || !access.allowed) return _buildMessage('无权访问私密内容');
++    if (access.sources.isEmpty) return _buildMessage('私密库暂时没有可用资源');
++    if (_catalog == null) return _buildMessage('私密库暂时无法读取');
++
++    return RefreshIndicator(
++      onRefresh: () => _load(source: _selectedSource),
++      child: Column(
++        crossAxisAlignment: CrossAxisAlignment.start,
++        children: [
++          Padding(
++            padding: const EdgeInsets.fromLTRB(16, 20, 16, 8),
++            child: Text(
++              '私密',
++              style: FontUtils.poppins(
++                fontSize: 22,
++                fontWeight: FontWeight.w700,
++                color: const Color(0xFF27AE60),
++              ),
++            ),
++          ),
++          SizedBox(
++            height: 44,
++            child: ListView.separated(
++              scrollDirection: Axis.horizontal,
++              padding: const EdgeInsets.symmetric(horizontal: 16),
++              itemCount: access.sources.length,
++              separatorBuilder: (_, __) => const SizedBox(width: 8),
++              itemBuilder: (context, index) {
++                final source = access.sources[index];
++                return ChoiceChip(
++                  label: Text(source.name),
++                  selected: source.key == _selectedSource,
++                  selectedColor: const Color(0xFF27AE60).withOpacity(0.18),
++                  onSelected: (_) => _load(source: source.key),
++                );
++              },
++            ),
++          ),
++          Expanded(child: _buildCatalog()),
++        ],
++      ),
++    );
++  }
++
++  Widget _buildCatalog() {
++    final catalog = _catalog!;
++    if (catalog.items.isEmpty) return _buildMessage('当前私密源没有可播放内容');
++
++    return LayoutBuilder(
++      builder: (context, constraints) {
++        final columns = DeviceUtils.getTabletColumnCount(context);
++        const padding = 16.0;
++        const spacing = 12.0;
++        final width = (constraints.maxWidth - padding * 2 - spacing * (columns - 1)) / columns;
++
++        return GridView.builder(
++          padding: const EdgeInsets.all(padding),
++          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
++            crossAxisCount: columns,
++            childAspectRatio: 1 / 2,
++            crossAxisSpacing: spacing,
++            mainAxisSpacing: DeviceUtils.isTablet(context) ? 0 : 16,
++          ),
++          itemCount: catalog.items.length,
++          itemBuilder: (context, index) {
++            final result = catalog.items[index];
++            final video = result.toVideoInfo();
++            return VideoCard(
++              key: ValueKey('${result.source}_${result.id}'),
++              videoInfo: video,
++              from: 'search',
++              cardWidth: width,
++              onTap: () => widget.onVideoTap(video),
++            );
++          },
++        );
++      },
++    );
++  }
++
++  Widget _buildMessage(String message) {
++    return Center(
++      child: Text(
++        message,
++        style: FontUtils.poppins(fontSize: 16, color: const Color(0xFF7F8C8D)),
++      ),
++    );
++  }
++}
+diff --git a/lib/services/api_service.dart b/lib/services/api_service.dart
+index 90445b8..7962e99 100644
+--- a/lib/services/api_service.dart
++++ b/lib/services/api_service.dart
+@@ -43,6 +43,60 @@ class ApiResponse<T> {
+   }
+ }
+ 
++class PrivateSource {
++  final String key;
++  final String name;
++
++  const PrivateSource({required this.key, required this.name});
++
++  factory PrivateSource.fromJson(Map<String, dynamic> json) {
++    return PrivateSource(
++      key: json['key'] as String? ?? '',
++      name: json['name'] as String? ?? '',
++    );
++  }
++}
++
++class PrivateAccess {
++  final bool allowed;
++  final List<PrivateSource> sources;
++
++  const PrivateAccess({required this.allowed, this.sources = const []});
++
++  factory PrivateAccess.fromJson(Map<String, dynamic> json) {
++    final sourceList = json['sources'] as List<dynamic>? ?? [];
++    return PrivateAccess(
++      allowed: json['allowed'] as bool? ?? false,
++      sources: sourceList
++          .map((item) => PrivateSource.fromJson(item as Map<String, dynamic>))
++          .toList(),
++    );
++  }
++}
++
++class PrivateCatalog {
++  final List<SearchResult> items;
++  final int page;
++  final int pageCount;
++
++  const PrivateCatalog({
++    required this.items,
++    required this.page,
++    required this.pageCount,
++  });
++
++  factory PrivateCatalog.fromJson(Map<String, dynamic> json) {
++    final items = json['items'] as List<dynamic>? ?? [];
++    return PrivateCatalog(
++      items: items
++          .map((item) => SearchResult.fromJson(item as Map<String, dynamic>))
++          .toList(),
++      page: json['page'] as int? ?? 1,
++      pageCount: json['pageCount'] as int? ?? 1,
++    );
++  }
++}
++
+ /// 通用API请求服务
+ class ApiService {
+   static const Duration _timeout = Duration(seconds: 30);
+@@ -692,6 +746,35 @@ class ApiService {
+     }
+   }
+ 
++  /// 读取服务端的私密访问权限。权限由 LunaTV 的站长账号与“私密”用户组统一控制。
++  static Future<PrivateAccess> getPrivateAccess() async {
++    final response = await get<PrivateAccess>(
++      '/api/private/access',
++      fromJson: (data) => PrivateAccess.fromJson(data as Map<String, dynamic>),
++    );
++
++    return response.success && response.data != null
++        ? response.data!
++        : const PrivateAccess(allowed: false);
++  }
++
++  /// 获取 LunaTV 私密库的当前视频源目录。
++  static Future<PrivateCatalog?> getPrivateCatalog({
++    String? source,
++    int page = 1,
++  }) async {
++    final query = <String, String>{'page': '$page'};
++    if (source != null && source.isNotEmpty) query['source'] = source;
++
++    final response = await get<PrivateCatalog>(
++      '/api/private/catalog',
++      queryParameters: query,
++      fromJson: (data) => PrivateCatalog.fromJson(data as Map<String, dynamic>),
++    );
++
++    return response.success ? response.data : null;
++  }
++
+   /// 获取直播源列表
+   static Future<List<LiveSource>> getLiveSources() async {
+     try {
+diff --git a/lib/services/version_service.dart b/lib/services/version_service.dart
+index a9415bc..c3c299f 100644
+--- a/lib/services/version_service.dart
++++ b/lib/services/version_service.dart
+@@ -4,8 +4,12 @@ import 'package:package_info_plus/package_info_plus.dart';
+ import 'package:shared_preferences/shared_preferences.dart';
+ 
+ class VersionService {
+-  static const String githubRepoUrl = 'https://github.com/MoonTechLab/Selene';
+-  static const String githubApiUrl = 'https://api.github.com/repos/MoonTechLab/Selene/releases/latest';
++  static const String githubRepoUrl =
++      'https://github.com/AbelleraSuk/selene-private-build';
++  static const String githubApiUrl =
++      'https://api.github.com/repos/AbelleraSuk/selene-private-build/releases/latest';
++  static const String _privateBuildId =
++      String.fromEnvironment('SELENE_PRIVATE_BUILD_ID', defaultValue: 'local');
+   static const String _lastCheckKey = 'last_version_check';
+   static const String _dismissedVersionKey = 'dismissed_version';
+   
+@@ -27,13 +31,15 @@ class VersionService {
+       if (response.statusCode == 200) {
+         final data = json.decode(response.body);
+         final tagName = data['tag_name'] as String;
+-        final latestVersion = tagName.startsWith('v') ? tagName.substring(1) : tagName;
++        final latestVersion = tagName.startsWith('private-')
++            ? tagName.substring('private-'.length)
++            : tagName;
+         final releaseNotes = data['body'] as String? ?? '';
+         
+-        // 比较版本号
+-        if (_isNewerVersion(currentVersion, latestVersion)) {
++        // 私密构建按上游源码提交标识更新，避免官方更新覆盖自定义功能。
++        if (latestVersion != _privateBuildId) {
+           return VersionInfo(
+-            currentVersion: currentVersion,
++            currentVersion: '$currentVersion ($_privateBuildId)',
+             latestVersion: latestVersion,
+             releaseNotes: releaseNotes,
+           );
+@@ -49,23 +55,7 @@ class VersionService {
+   
+   /// 获取 GitHub Release 页面 URL
+   static String getReleaseUrl(String version) {
+-    return '$githubRepoUrl/releases/tag/v$version';
+-  }
+-  
+-  /// 比较版本号，判断是否有新版本
+-  static bool _isNewerVersion(String current, String latest) {
+-    final currentParts = current.split('.').map(int.parse).toList();
+-    final latestParts = latest.split('.').map(int.parse).toList();
+-    
+-    for (int i = 0; i < 3; i++) {
+-      final currentPart = i < currentParts.length ? currentParts[i] : 0;
+-      final latestPart = i < latestParts.length ? latestParts[i] : 0;
+-      
+-      if (latestPart > currentPart) return true;
+-      if (latestPart < currentPart) return false;
+-    }
+-    
+-    return false;
++    return '$githubRepoUrl/releases/tag/private-$version';
+   }
+   
+   /// 检查是否应该显示更新提示（避免频繁提示）
+diff --git a/lib/widgets/main_layout.dart b/lib/widgets/main_layout.dart
+index 63b868b..b68c662 100644
+--- a/lib/widgets/main_layout.dart
++++ b/lib/widgets/main_layout.dart
+@@ -28,6 +28,7 @@ class MainLayout extends StatefulWidget {
+   final Function(String)? onSearchSubmitted;
+   final VoidCallback? onClearSearch;
+   final bool showBottomNav;
++  final bool showPrivateNav;
+ 
+   const MainLayout({
+     super.key,
+@@ -46,6 +47,7 @@ class MainLayout extends StatefulWidget {
+     this.onSearchSubmitted,
+     this.onClearSearch,
+     this.showBottomNav = true,
++    this.showPrivateNav = false,
+   });
+ 
+   @override
+@@ -890,6 +892,7 @@ class _MainLayoutState extends State<MainLayout> {
+       {'icon': LucideIcons.cat, 'label': '动漫'},
+       {'icon': LucideIcons.clover, 'label': '综艺'},
+       {'icon': LucideIcons.radio, 'label': '直播'},
++      if (widget.showPrivateNav) {'icon': LucideIcons.shieldCheck, 'label': '私密'},
+     ];
+ 
+     final isTablet = DeviceUtils.isTablet(context);
