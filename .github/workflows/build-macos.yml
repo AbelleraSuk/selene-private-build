@@ -14,45 +14,36 @@ jobs:
     steps:
       - name: Check out build files
         uses: actions/checkout@v4
-
       - name: Check out Selene source
         run: git clone --depth 1 https://github.com/MoonTechLab/Selene-Source.git selene
-
       - name: Make pubspec compatible
         working-directory: selene
         run: |
           sed -i '' '/^  config:/,/^    enable-swift-package-manager: false/d' pubspec.yaml
-
       - name: Read upstream revision
         id: upstream
         working-directory: selene
         run: echo "sha=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
-
       - name: Apply private library support
         run: git -C selene apply ../selene-private.patch
-
       - name: Install Flutter
         uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.24.3'
           channel: stable
           cache: true
-
       - name: Fetch dependencies
         working-directory: selene
         run: flutter pub get
-
       - name: Build macOS app
         working-directory: selene
         run: flutter build macos --release --dart-define=SELENE_PRIVATE_BUILD_ID=${{ steps.upstream.outputs.sha }}
-
       - name: Package app
         working-directory: selene
         run: |
           APP=build/macos/Build/Products/Release/selene.app
           codesign --force --deep --sign - "$APP"
           ditto -c -k --sequesterRsrc --keepParent "$APP" ../Selene-Private-macos.zip
-
       - name: Upload macOS app
         uses: softprops/action-gh-release@v2
         with:
