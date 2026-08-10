@@ -1,14 +1,20 @@
 name: Build Selene Private
 
 
+
+
 on:
   workflow_dispatch:
   schedule:
-    - cron: '20 3 * * *'
+    - cron: '0 19 * * *'
+
+
 
 
 permissions:
   contents: write
+
+
 
 
 jobs:
@@ -34,8 +40,3 @@ jobs:
         run: flutter build macos --release --dart-define=SELENE_PRIVATE_BUILD_ID=${{ steps.upstream.outputs.sha }}
       - working-directory: selene
         run: |
-          APP=build/macos/Build/Products/Release/selene.app
-          codesign --force --deep --sign - "$APP"
-          ditto -c -k --sequesterRsrc --keepParent "$APP" ../Selene-Private-macos.zip
-      - uses: softprops/action-gh-release@v2
-        with:
