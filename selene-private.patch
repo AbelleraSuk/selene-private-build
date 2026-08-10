@@ -64,9 +64,9 @@ index b99dd1d..ae08207 100644
    /// 处理底部导航栏切换
    void _onBottomNavChanged(int index) {
      if (!mounted) return;
-diff --git a/lib/screens/private_screen.dart b/lib/screens/private_screen.dart
+diff --git a/Users/admin/Documents/Codex/2026-08-10/lunatv/work/Selene-Source-main/lib/screens/private_screen.dart b/lib/screens/private_screen.dart
 new file mode 100644
-index 0000000..4505ee0
+index 0000000..7701bfe
 --- /dev/null
 +++ b/lib/screens/private_screen.dart
 @@ -0,0 +1,185 @@
@@ -112,6 +112,7 @@ index 0000000..4505ee0
 +    final catalog = _catalog;
 +    if (_loadingMore || catalog == null || catalog.page >= catalog.pageCount) return;
 +    if (_scrollController.position.extentAfter > 320) return;
++
 +    setState(() => _loadingMore = true);
 +    final nextPage = await ApiService.getPrivateCatalog(
 +      source: _selectedSource,
