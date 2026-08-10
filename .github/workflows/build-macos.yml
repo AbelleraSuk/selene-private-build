@@ -21,7 +21,7 @@ jobs:
       - run: git -C selene apply ../selene-private.patch
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.32.0'
+          flutter-version: '3.34.0'
           channel: stable
           cache: true
       - working-directory: selene
