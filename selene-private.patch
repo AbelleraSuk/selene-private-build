@@ -92,11 +92,40 @@ index 0000000..4505ee0
 +  PrivateAccess? _access;
 +  PrivateCatalog? _catalog;
 +  String? _selectedSource;
++  late final ScrollController _scrollController;
++  bool _loadingMore = false;
 +
 +  @override
 +  void initState() {
 +    super.initState();
++    _scrollController = ScrollController()..addListener(_loadNextPage);
 +    _load();
++  }
++
++  @override
++  void dispose() {
++    _scrollController.dispose();
++    super.dispose();
++  }
++
++  Future<void> _loadNextPage() async {
++    final catalog = _catalog;
++    if (_loadingMore || catalog == null || catalog.page >= catalog.pageCount) return;
++    if (_scrollController.position.extentAfter > 320) return;
++    setState(() => _loadingMore = true);
++    final nextPage = await ApiService.getPrivateCatalog(
++      source: _selectedSource,
++      page: catalog.page + 1,
++    );
++    if (!mounted || nextPage == null) return;
++    setState(() {
++      _catalog = PrivateCatalog(
++        items: [...catalog.items, ...nextPage.items],
++        page: nextPage.page,
++        pageCount: nextPage.pageCount,
++      );
++      _loadingMore = false;
++    });
 +  }
 +
 +  Future<void> _load({String? source, int page = 1}) async {
@@ -171,46 +200,7 @@ index 0000000..4505ee0
 +            ),
 +          ),
 +          Expanded(child: _buildCatalog()),
-+          if (_catalog!.pageCount > 1) _buildPagination(_catalog!),
 +        ],
-+      ),
-+    );
-+  }
-+
-+  Widget _buildPagination(PrivateCatalog catalog) {
-+    final canGoBack = catalog.page > 1;
-+    final canGoForward = catalog.page < catalog.pageCount;
-+
-+    return SafeArea(
-+      top: false,
-+      child: Padding(
-+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-+        child: Row(
-+          mainAxisAlignment: MainAxisAlignment.center,
-+          children: [
-+            IconButton(
-+              tooltip: '上一页',
-+              onPressed: canGoBack
-+                  ? () => _load(source: _selectedSource, page: catalog.page - 1)
-+                  : null,
-+              icon: const Icon(Icons.chevron_left_rounded),
-+            ),
-+            Text(
-+              '${catalog.page} / ${catalog.pageCount}',
-+              style: FontUtils.poppins(
-+                fontSize: 14,
-+                fontWeight: FontWeight.w600,
-+              ),
-+            ),
-+            IconButton(
-+              tooltip: '下一页',
-+              onPressed: canGoForward
-+                  ? () => _load(source: _selectedSource, page: catalog.page + 1)
-+                  : null,
-+              icon: const Icon(Icons.chevron_right_rounded),
-+            ),
-+          ],
-+        ),
 +      ),
 +    );
 +  }
@@ -227,6 +217,7 @@ index 0000000..4505ee0
 +        final width = (constraints.maxWidth - padding * 2 - spacing * (columns - 1)) / columns;
 +
 +        return GridView.builder(
++          controller: _scrollController,
 +          padding: const EdgeInsets.all(padding),
 +          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
 +            crossAxisCount: columns,
@@ -234,8 +225,11 @@ index 0000000..4505ee0
 +            crossAxisSpacing: spacing,
 +            mainAxisSpacing: DeviceUtils.isTablet(context) ? 0 : 16,
 +          ),
-+          itemCount: catalog.items.length,
++          itemCount: catalog.items.length + (_loadingMore ? 1 : 0),
 +          itemBuilder: (context, index) {
++            if (index == catalog.items.length) {
++              return const Center(child: CircularProgressIndicator());
++            }
 +            final result = catalog.items[index];
 +            final video = result.toVideoInfo();
 +            return VideoCard(
